@@ -2,6 +2,86 @@
 
 This repository contains the documentation website code and Markdown source files for [docs.github.com](https://docs.github.com).
 
+https://en.wikipedia.org/wiki/Type_I_and_type_II_errors) arising from systemic conditions external to your proposed changes, consider starting with an experiment in which both the `try` and `use` blocks invoke the control method. Then proceed with introducing a candidate.
+
+### Finishing an experiment
+
+As your candidate behavior converges on the controls, you'll start thinking about removing an experiment and using the new behavior.
+
+* If there are any ignore blocks, the candidate behavior is *guaranteed* to be different. If this is unacceptable, you'll need to remove the ignore blocks and resolve any ongoing mismatches in behavior until the observations match perfectly every time.
+* When removing a read-behavior experiment, it's a good idea to keep any write-side duplication between an old and new system in place until well after the new behavior has been in production, in case you need to roll back.
+
+## Breaking the rules
+
+Sometimes scientists just gotta do weird stuff. We understand.
+
+### Ignoring results entirely
+
+Science is useful even when all you care about is the timing data or even whether or not a new code path blew up. If you have the ability to incrementally control how often an experiment runs via your `enabled?` method, you can use it to silently and carefully test new code paths and ignore the results altogether. You can do this by setting `ignore { true }`, or for greater efficiency, `compare { true }`.
+
+This will still log mismatches if any exceptions are raised, but will disregard the values entirely.
+
+### Trying more than one thing
+
+It's not usually a good idea to try more than one alternative simultaneously. Behavior isn't guaranteed to be isolated and reporting + visualization get quite a bit harder. Still, it's sometimes useful.
+
+To try more than one alternative at once, add names to some `try` blocks:
+
+```ruby
+require "scientist"
+
+class MyWidget
+  include Scientist
+
+  def allows?(user)
+    science "widget-permissions" do |e|
+      e.use { model.check_user(user).valid? } # old way
+
+      e.try("api") { user.can?(:read, model) } # new service API
+      e.try("raw-sql") { user.can_sql?(:read, model) } # raw query
+    end
+  end
+end
+```
+
+When the experiment runs, all candidate behaviors are tested and each candidate observation is compared with the control in turn.
+
+### No control, just candidates
+
+Define the candidates with named `try` blocks, omit a `use`, and pass a candidate name to `run`:
+
+```ruby
+experiment = MyExperiment.new("various-ways") do |e|
+  e.try("first-way")  { ... }
+  e.try("second-way") { ... }
+end
+
+experiment.run("second-way")
+```
+
+The `science` helper also knows this trick:
+
+```ruby
+science "various-ways", run: "first-way" do |e|
+  e.try("first-way")  { ... }
+  e.try("second-way") { ... }
+end
+```
+
+#### Providing fake timing data
+
+If you're writing tests that depend on specific timing values, you can provide canned durations using the `fabricate_durations_for_testing_purposes` method, and Scientist will report these in `Scientist::Observation#duration` instead of the actual execution times.
+
+```ruby
+science "absolutely-nothing-suspicious-happening-here" do |e|
+  e.use { ... } # "control"
+  e.try { ... } # "candidate"
+  e.fabricate_durations_for_testing_purposes( "control" => 1.0, "candidate" => 0.5 )
+end
+```
+
+`fabricate_durations_for_testing_purposes` takes a Hash of duration values, keyed by behavior names.  (By default, Scientist uses `"control"` and `"candidate"`, but if you override these as shown in [Trying more than one thing](#trying-more-than-one-thing) or [No control, just candidates](#no-control-just-candidates), use matching names here.)  If a name is not provided, the actual execution time will be reported instead.
+
 GitHub's Docs team works on pre-production content in a private repo that regularly syncs with this public repo.
 
 Use the table of contents icon <img src="/contributing/images/table-of-contents.png" width="25" height="25" /> on the top left corner of this document to get to a specific section of this guide quickly.
